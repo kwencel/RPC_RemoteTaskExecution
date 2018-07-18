@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-
+import argparse
 import asyncio
+import os
 from asyncio.subprocess import PIPE
+from functools import partial
 
 from rpcudp.protocol import RPCProtocol
 
@@ -33,19 +35,18 @@ class RPCServer(RPCProtocol):
 
     @staticmethod
     async def _monitor_stdout(sender, process):
-        while True:
-            line = await process.stdout.readline()
-            if line:
-                protocol.consume_stdout(sender, line)
-            else:
-                break
+        await RPCServer._monitor_stream(process.stdout, partial(protocol.consume_stdout, sender))
 
     @staticmethod
     async def _monitor_stderr(sender, process):
+        await RPCServer._monitor_stream(process.stderr, partial(protocol.consume_stderr, sender))
+
+    @staticmethod
+    async def _monitor_stream(stream, callback):
         while True:
-            line = await process.stderr.readline()
+            line = await stream.readline()
             if line:
-                protocol.consume_stderr(sender, line)
+                callback(line)
             else:
                 break
 
@@ -57,7 +58,17 @@ class RPCServer(RPCProtocol):
             process.stdin.write(data)
 
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--bind-address',
+                    help='Address of the RPC server. Defaults to 127.0.0.1 or RTASK_BIND_ADDRESS environment variable (if set).',
+                    default=os.environ.get('RTASK_BIND_ADDRESS', '127.0.0.1'))
+parser.add_argument('--bind-port', type=int,
+                    help='Port of the server. Defaults to 1234 or RTASK_BIND_PORT environment variable (if set).',
+                    default=os.environ.get('RTASK_BIND_PORT', 1234))
+args = parser.parse_args()
+
+
 loop = asyncio.get_event_loop()
-listen = loop.create_datagram_endpoint(RPCServer, local_addr=('127.0.0.1', 1234))
+listen = loop.create_datagram_endpoint(RPCServer, local_addr=(args.bind_address, args.bind_port))
 transport, protocol = loop.run_until_complete(listen)
 loop.run_forever()
