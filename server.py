@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
-from asyncio.subprocess import PIPE, STDOUT
+from asyncio.subprocess import PIPE
 
 from rpcudp.protocol import RPCProtocol
 
@@ -14,6 +14,7 @@ class RPCServer(RPCProtocol):
         process = await self._start_process(sender, command)
         # Run in background
         asyncio.ensure_future(self._monitor_stdout(sender, process))
+        asyncio.ensure_future(self._monitor_stderr(sender, process))
         asyncio.ensure_future(self._wait_for_process_end(sender, process))
 
     def rpc_consume_input(self, sender, data):
@@ -21,7 +22,7 @@ class RPCServer(RPCProtocol):
 
     # Private functions
     async def _start_process(self, sender, command):
-        process = await asyncio.create_subprocess_shell(command, stdin=PIPE, stdout=PIPE, stderr=STDOUT)
+        process = await asyncio.create_subprocess_shell(command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
         self.senders_tasks[sender] = process
         return process
 
@@ -35,7 +36,16 @@ class RPCServer(RPCProtocol):
         while True:
             line = await process.stdout.readline()
             if line:
-                protocol.consume_output(sender, line)
+                protocol.consume_stdout(sender, line)
+            else:
+                break
+
+    @staticmethod
+    async def _monitor_stderr(sender, process):
+        while True:
+            line = await process.stderr.readline()
+            if line:
+                protocol.consume_stderr(sender, line)
             else:
                 break
 

@@ -26,8 +26,11 @@ class StdinCaptureProtocol(asyncio.Protocol):
 
 # Any methods starting with "rpc_" are available to clients.
 class RPCServer(RPCProtocol):
-    def rpc_consume_output(self, sender, output):
+    def rpc_consume_stdout(self, sender, output):
         print(output.decode("utf-8").rstrip('\n'), flush=True)
+
+    def rpc_consume_stderr(self, sender, output):
+        print(output.decode("utf-8").rstrip('\n'), file=sys.stderr, flush=True)
 
     def rpc_consume_return_code(self, sender, retval):
         global return_code
